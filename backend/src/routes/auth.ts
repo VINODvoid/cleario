@@ -1,8 +1,9 @@
 import { Request, Response, Router } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import {email, z} from "zod"
+import {any, email, z} from "zod"
 import { prisma } from "../lib/db";
+import id from "zod/v4/locales/id.cjs";
 
 
 
@@ -23,14 +24,87 @@ const loginSchema = z.object({
 
 
 // Register
-UserRouter.post("/register", (req: Request, res: Response) => {
+UserRouter.post("/register", async(req: Request, res: Response) => {
   try {
-    const { email, password, firstName, lastName } = req.body;
-    if (!email || !password || !firstName || !lastName) {
+    const validateData = registerSchema.parse(req.body);
+    const { email, password, firstName, lastName } = validateData;
+    
+    // check for existing user
+    const existingUser= await prisma.user.findUnique({
+      where:{
+        email
+      }
+    });
+    if(existingUser) return res.status(400).json({
+      message:"User already exists"
+    });
+
+    // hash password
+    const hashedPassword = await bcrypt.hash(password,12);
+
+    // create user with profile and default portfolio
+    const user = await prisma.user.create({
+      data:{
+        email,
+        password:hashedPassword,
+        firstName,
+        lastName,
+        profile:{
+          create:{
+            riskTolerance:"MEDIUM",
+            investmentGoals:[]
+          }
+        },
+        portfolios:{
+          create:{
+            name:"Default Portfolio",
+            description:"Main investment portfolio",
+            isDefault:true,
+          }
+        }
+      },
+      include:{
+        profile:true
+      }
+    });
+
+    const token  = jwt.sign({
+      userId:user.id,email:user.email
+    },process.env.JWT_SECRET!,
+  {
+    expiresIn:'7d'
+  });
+  res.status(201).json({
+    message:'User created successfully',
+    token,
+    user:{
+      id:user.id,
+      email:user.email,
+      firstName:user.firstName,
+      lastName:user.lastName,
+    }
+  });
+
+  } catch (error) {
+    if(error instanceof z.ZodError)
+    {
       return res.status(400).json({
-        message: "All fields are required",
+        message:'Validation error',errors:error.message
       });
     }
-    const existingUser = (email)
-  } catch (error) {}
+    console.log("Registration Error",error);
+    res.status(500).json({
+      message:"Server Error"
+    });
+
+  }
+});
+
+// Login
+UserRouter.post("/login",async(req:Request,res:Response)=>{
+  try {
+    
+  } catch (error) {
+    
+  }
 });
