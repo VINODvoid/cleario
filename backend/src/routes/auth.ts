@@ -1,8 +1,11 @@
 import { Request, Response, Router } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { z } from "zod";
+import { email, z } from "zod";
 import { prisma } from "../lib/db";
+import { authMiddleware } from "../middlewares/auth";
+import id from "zod/v4/locales/id.cjs";
+import { profile } from "console";
 
 const UserRouter = Router();
 
@@ -158,5 +161,41 @@ UserRouter.post("/login", async (req: Request, res: Response) => {
     res.status(500).json({
       message: "Server Error",
     });
+  }
+});
+
+
+// get current user
+UserRouter.get("/me",authMiddleware,async (req:Request,res:Response)=>{
+  try {
+    const user = await prisma.user.findUnique({
+      where:{id:req.user.userId},
+      include:{
+        profile:true,
+        portfolios:{
+          include:{
+            holdings:true
+          }
+        }
+      }
+    });
+    if(!user) return res.status(404).json({message:'User not found'});
+    
+    res.json({
+      user:{
+        id:user.id,
+        email:user.email,
+        firstName:user.firstName,
+        lastName:user.lastName,
+        profile:user.profile,
+        portfolios:user.portfolios,
+      }
+    })
+  } catch (error) {
+    console.log("Get user error"),error;
+    res.status(500).json({
+      message:"Server Error"
+    });
+    
   }
 });
